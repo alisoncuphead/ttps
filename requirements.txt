@@ -13,3 +13,4 @@ ollama             # Official Python client for Ollama
 # Utilities
 requests          # To download MITRE STIX data
 pydantic           # Data validation
+bs4
