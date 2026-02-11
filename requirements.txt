@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+python-multipart  # Required for file uploads
+
+# PDF & Text Processing
+pymupdf           # High-performance PDF text extraction
+sentence-transformers  # For TTP semantic embeddings
+
+# Databases & LLM Clients
+qdrant-client     # Local vector DB client
+ollama             # Official Python client for Ollama
+
+# Utilities
+requests          # To download MITRE STIX data
+pydantic           # Data validation
