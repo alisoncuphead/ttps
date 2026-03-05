@@ -9,8 +9,12 @@ sentence-transformers  # For TTP semantic embeddings
 # Databases & LLM Clients
 qdrant-client     # Local vector DB client
 ollama             # Official Python client for Ollama
+neo4j             # Neo4j Graph DB driver
+openai            # Compatible client for LLM APIs (Ollama/OpenAI)
 
 # Utilities
 requests          # To download MITRE STIX data
 pydantic           # Data validation
-bs4
+pydantic-settings  # Settings management via env vars
+bs4               # BeautifulSoup for web scraping
+python-dotenv      # For local dev .env files

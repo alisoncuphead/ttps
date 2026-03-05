@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TTP-AE | CTI Attribution Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --text-color: #c9d1d9;
+            --accent-color: #58a6ff;
+            --border-color: #30363d;
+            --success-color: #238636;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1000px;
+        }
+
+        h1 { border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 30px; }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            background: #0d1117;
+            border: 1px solid var(--border-color);
+            color: white;
+            border-radius: 4px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: var(--success-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover { opacity: 0.9; }
+        button:disabled { background-color: #21262d; cursor: not-allowed; }
+
+        .results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .full-width { grid-column: 1 / -1; }
+
+        .tag {
+            display: inline-block;
+            background: #1f6feb;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+
+        .ttp-item { border-left: 3px solid var(--accent-color); padding-left: 10px; margin-bottom: 15px; }
+        .ttp-id { font-family: monospace; color: var(--accent-color); font-weight: bold; }
+
+        pre { background: #000; padding: 10px; border-radius: 4px; font-size: 12px; overflow-x: auto; }
+
+        .loader {
+            display: none;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--accent-color);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 2s linear infinite;
+            margin: 10px auto;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>TTP Extraction & Attribution Dashboard</h1>
+
+        <div class="card">
+            <h3>Analyze CTI Report</h3>
+            <div class="input-group">
+                <input type="text" id="reportUrl" placeholder="Enter report URL (e.g., https://mandiant.com/report/apt42...)">
+                <button id="analyzeBtn">Analyze Report</button>
+            </div>
+            <div id="loader" class="loader"></div>
+            <p id="statusMsg" style="font-size: 14px; text-align: center; color: #8b949e;"></p>
+        </div>
+
+        <div id="results" style="display: none;">
+            <div class="results-grid">
+                <div class="card full-width">
+                    <h3>Incident Summary</h3>
+                    <p id="summaryText"></p>
+                </div>
+                <div class="card">
+                    <h3>Extracted Entities</h3>
+                    <strong>Actors:</strong> <div id="actorTags" style="margin-top:5px"></div>
+                    <strong>Victims:</strong> <div id="victimTags" style="margin-top:5px"></div>
+                </div>
+                <div class="card">
+                    <h3>Indicators (IoCs)</h3>
+                    <div id="iocTags"></div>
+                </div>
+                <div class="card full-width">
+                    <h3>Behavioral TTPs (MITRE Mapping)</h3>
+                    <div id="ttpList"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Attribution Clusters</h3>
+            <p style="font-size: 14px; color: #8b949e;">Actors grouped by shared behavioral TTPs across reports.</p>
+            <button id="refreshClusters">Refresh Clusters</button>
+            <div id="clusterList" style="margin-top:20px"></div>
+        </div>
+    </div>
+
+    <script>
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const refreshClusters = document.getElementById('refreshClusters');
+        const reportUrlInput = document.getElementById('reportUrl');
+        const loader = document.getElementById('loader');
+        const statusMsg = document.getElementById('statusMsg');
+
+        analyzeBtn.onclick = async () => {
+            const url = reportUrlInput.value.trim();
+            if (!url) return;
+
+            analyzeBtn.disabled = true;
+            loader.style.display = 'block';
+            statusMsg.innerText = 'Acquiring report and identifying TTPs (this may take a minute)...';
+            document.getElementById('results').style.display = 'none';
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+
+                if (!response.ok) throw new Error('Analysis failed');
+
+                const data = await response.json();
+                displayResults(data);
+                statusMsg.innerText = 'Analysis complete.';
+            } catch (err) {
+                statusMsg.innerText = 'Error: ' + err.message;
+            } finally {
+                analyzeBtn.disabled = false;
+                loader.style.display = 'none';
+            }
+        };
+
+        function displayResults(data) {
+            document.getElementById('results').style.display = 'block';
+            document.getElementById('summaryText').innerText = data.summary;
+            
+            document.getElementById('actorTags').innerHTML = data.actors.map(a => `<span class="tag">${a}</span>`).join('');
+            document.getElementById('victimTags').innerHTML = data.victims.map(v => `<span class="tag">${v}</span>`).join('');
+            document.getElementById('iocTags').innerHTML = data.iocs.map(i => `<span class="tag" style="background:#6e7681">${i.type}: ${i.value}</span>`).join('');
+
+            const ttpList = document.getElementById('ttpList');
+            ttpList.innerHTML = data.ttps.map(ttp => `
+                <div class="ttp-item">
+                    <span class="ttp-id">${ttp.mitre_id || 'Unknown'}</span> - <strong>${ttp.mitre_name || 'N/A'}</strong>
+                    <p style="font-size:14px; margin:5px 0;"><em>Behavior:</em> ${ttp.description}</p>
+                    <p style="font-size:12px; color:#8b949e; margin:0;">Confidence: ${ttp.confidence ? (ttp.confidence * 100).toFixed(1) + '%' : 'N/A'}</p>
+                </div>
+            `).join('');
+        }
+
+        refreshClusters.onclick = async () => {
+            try {
+                const response = await fetch('/graph/clusters');
+                const data = await response.json();
+                const list = document.getElementById('clusterList');
+                list.innerHTML = data.clusters.map(c => `
+                    <div class="card" style="margin-bottom:10px; font-size:14px; border-color:#238636">
+                        <strong>${c.actor_1}</strong> &harr; <strong>${c.actor_2}</strong>
+                        <div style="margin-top:5px; color:#8b949e">
+                            Shared TTPs (${c.overlap}): ${c.shared_ttps.join(', ')}
+                        </div>
+                    </div>
+                `).join('') || '<p>No behavioral clusters found yet.</p>';
+            } catch (err) {
+                console.error('Cluster refresh failed', err);
+            }
+        };
+
+        // Initial cluster load
+        refreshClusters.onclick();
+    </script>
+</body>
+</html>
